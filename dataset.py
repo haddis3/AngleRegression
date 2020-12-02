@@ -45,110 +45,81 @@ class IdDataset(data.Dataset):
             transforms.ColorJitter(brightness=0, contrast=(0.7, 1.2), saturation=0, hue=0)
         ])
 
-        for name in os.listdir(osp.join(self.data_root, self.datamode)):
+        if self.datamode == "train" or self.datamode == "test":
 
-            prefix, extension = os.path.split(osp.join(self.data_root, self.datamode, name))
-            if extension.endswith('png'):
-                image_name = osp.join(self.data_root, self.datamode, name)
-                txt_file = name.split('.')[0] + '.txt'
-                self.image_list.append(image_name)
-                self.target.append(txt_file)
+            for name in os.listdir(osp.join(self.data_root, self.datamode)):
 
-        # for name in glob.glob(osp.join(self.data_root, self.datamode, '*.json')):
-        #     # print('processing:', name)
-        #     with open(name, encoding='utf-8') as f:
-        #         label_file = json.load(f)
-        #         image_name = label_file["imagePath"]
-        #         img_name = image_name.split('.')[0] + '_torso' + '.' + image_name.split('.')[1]
-        #         image_path = osp.join(self.data_root, self.datamode, img_name)
-        #         self.image_list.append(image_path)
-        #         upper_cord = []
-        #         down_cord = []
-        #         left_cord = []
-        #         right_cord = []
-        #         for i in range(4):
-        #
-        #             if label_file['shapes'][i]['label'] == '上轴':
-        #                 upper_cord.append(label_file['shapes'][i]['points'])
-        #
-        #             elif label_file['shapes'][i]['label'] == '下轴':
-        #                 down_cord.append(label_file['shapes'][i]['points'])
-        #
-        #             elif label_file['shapes'][i]['label'] == '左肩':
-        #                 left_cord.append(label_file['shapes'][i]['points'])
-        #
-        #             elif label_file['shapes'][i]['label'] == '右肩':
-        #                 right_cord.append(label_file['shapes'][i]['points'])
-        #
-        #         tmp1 = [item for sublist in upper_cord[0] for item in sublist]
-        #         tmp2 = [item for sublist in down_cord[0] for item in sublist]
-        #         tmp3 = [item for sublist in left_cord[0] for item in sublist]
-        #         tmp4 = [item for sublist in right_cord[0] for item in sublist]
-        #
-        #         keypoints = tmp1 + tmp2 + tmp3 + tmp4
-        #         self.target.append(keypoints)
-
+                prefix, extension = os.path.split(osp.join(self.data_root, self.datamode, name))
+                if extension.endswith('png'):
+                    image_name = osp.join(self.data_root, self.datamode, name)
+                    txt_file = name.split('.')[0] + '.txt'
+                    self.image_list.append(image_name)
+                    self.target.append(txt_file)
+        else:
+            for name in os.listdir(osp.join(self.data_root, self.datamode)):
+        
+                prefix, extension = os.path.split(osp.join(self.data_root, self.datamode, name))
+                if extension.endswith('png'):
+                    image_name = osp.join(self.data_root, self.datamode, name)
+                    self.image_list.append(image_name)
+                    
+        
         self.num_images = len(self.image_list)
         logger.info('=> num_images: {}'.format(self.num_images))
-        # print(self.image_list)
+        
 
     def __len__(self):
         return self.num_images
 
     def __getitem__(self, index):
 
-        image_name = self.image_list[index]
-        # print('processing:', image_name)
-        # keypoints = self.target[index]
-        target_path = self.target[index]
-        with open(osp.join(self.data_root, self.datamode, target_path), 'r') as f:
-            angle = f.readline()
+        if self.datamode == "train" or self.datamode == "test":
+            image_name = self.image_list[index]
+            # print('processing:', image_name)
+            # keypoints = self.target[index]
+            target_path = self.target[index]
+            with open(osp.join(self.data_root, self.datamode, target_path), 'r') as f:
+                angle = f.readline()
 
-        original_image = cv2.imread(image_name)
-        if original_image is None:
-             raise ValueError('Fail to read {}'.format(image_name))
-        h, w, c = original_image.shape
-        # image, keypoints, pad_up, pad_bottom, pad_left, pad_right, ratio = \
-        #     self._apply_resize_padding(original_image, h, w, keypoints, image_name)
-        # keypoints, rad = self.get_radius(keypoints)
+            original_image = cv2.imread(image_name)
+            if original_image is None:
+                raise ValueError('Fail to read {}'.format(image_name))
+        
+            # keypoints, rad = self.get_radius(keypoints)
 
-        # aug_rot = np.rad2deg(rad)
-        # M = cv2.getRotationMatrix2D((self.image_width / 2, self.image_height / 2), aug_rot,
-        #                             1)  # Positive values mean counter-clockwise rotation
-        # dst = cv2.warpAffine(image, M, (self.image_width, self.image_height))
+            # keypoints = self.normalization(keypoints)  # normalize the coordinate to [0, 1]
+            # convert ndarray to Tensors
+            if self.datamode == 'train':
+                prob = random.random()
+                if prob > 0.5:
+                    original_image = original_image[:, :, ::-1]
+                    angle = -float(angle)
 
-        # plt.figure(1)
-        # plt.subplot(121)
-        # plt.imshow(image[:, :, ::-1])
-        # plt.subplot(122)
-        # plt.imshow(dst[:, :, ::-1])
-        # plt.show()
+            image = self.transform(original_image)
+            # keypoints = torch.from_numpy(np.array(keypoints))
+            rad = torch.from_numpy(np.array(float(angle)))
 
-        # keypoints = self.normalization(keypoints)  # normalize the coordinate to [0, 1]
-        # convert ndarray to Tensors
-        if self.datamode == 'train':
-            prob = random.random()
-            if prob > 0.5:
-                original_image = original_image[:, :, ::-1]
-                angle = -float(angle)
+            result = {
+                'image': image,
+                'im_name': os.path.basename(image_name),
+                'rad': rad,
+            }
 
-        image = self.transform(original_image)
-        # keypoints = torch.from_numpy(np.array(keypoints))
-        rad = torch.from_numpy(np.array(float(angle)))
+            return result
+        else:
+            image_name = self.image_list[index]
+            original_image = cv2.imread(image_name)
+            if original_image is None:
+                raise ValueError('Fail to read {}'.format(image_name))
+            image = self.transform(original_image)
+            rad = torch.from_numpy(np.array(0))
+            result = {
+                    'image':image,
+                    'im_name':os.path.basename(image_name),
+                    'rad':rad     
+            }
+            return result
 
-        result = {
-            'image': image,
-            'im_name': os.path.basename(image_name),
-            # 'keypoints': keypoints,
-            'rad': rad,
-            # 'pad_up': pad_up,
-            # 'pad_bottom': pad_bottom,
-            # 'pad_left': pad_left,
-            # 'pad_right': pad_right,
-            # 'ratio': ratio
-        }
-
-        return result
 
     def _apply_resize_padding(self, img, h, w, keypoints, image_name):
 
